@@ -23,7 +23,7 @@ class WayForPayService:
         return hmac.new(
             self.merchant_secret_key.encode('utf-8'), 
             sign_str.encode('utf-8'), 
-            hashlib.sha256).hexdigest()
+            hashlib.md5).hexdigest()
 
     def _make_req(self, endpoint: str, method: str = "POST", payload: dict = {}, **kwargs):
         url = f"{self.base_url.rstrip("/")}/{endpoint.lstrip("/")}"
@@ -41,19 +41,23 @@ class WayForPayService:
         response.raise_for_status()
         return response.json()
 
-    def get_payments(self, date_begin: str, date_end: str, merchant_account:str, transaction_type="TRANSACTION_LIST"):
+    def get_payments(self, date_begin: str, date_end: str, merchant_account:str=None, transaction_type="TRANSACTION_LIST"):
         sign_key = self._build_signature(
-            data={"dateBegin": date_begin, "dateEnd": date_end, "merchantAccount": merchant_account, "transactionType": transaction_type}, 
+            data={"merchantAccount": merchant_account or self.merchant_account, "dateBegin": date_begin, "dateEnd": date_end}, 
             keys_order=GET_PAYMENTS_SIGNATURE_KEYS
             )
+
+        print("sign_key", sign_key)
+        print("dateBegin", date_begin)
+        print("dateEnd", date_end)
 
         payload = {
                 "apiVersion": 1,
                 "transactionType": transaction_type,
                 "merchantAccount": merchant_account,
                 "merchantSignature": sign_key,
-                "dateBegin": date_begin,
-                "dateEnd": date_end
+                "dateBegin": int(date_begin),
+                "dateEnd": int(date_end)
             }
 
         return self._make_req(endpoint="payments", method="POST", payload=payload)

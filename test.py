@@ -1,0 +1,4 @@
+from dispatcher import run_payments_statistics_task_for_day
+
+
+run_payments_statistics_task_for_day()
