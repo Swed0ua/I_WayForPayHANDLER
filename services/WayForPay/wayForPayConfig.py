@@ -1,0 +1,1 @@
+GET_PAYMENTS_SIGNATURE_KEYS = ["merchantAccount", "dateBegin", "dateEnd"]
