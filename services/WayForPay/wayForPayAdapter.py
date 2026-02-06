@@ -1,7 +1,7 @@
 class WayForPayAdapter:
     @staticmethod
-    def extract_suitable_items(transaction_list: dict) -> list[dict]:
-        return [transaction for transaction in transaction_list if transaction.get("transactionStatus") == "ACCEPTED"]
+    def extract_suitable_items(transaction_list: list[dict]) -> list[dict]:
+        return [transaction for transaction in transaction_list if transaction.get("transactionStatus") == "Approved"]
 
     @staticmethod
     def group_transactions_by_amount(transaction_list: dict) -> dict:

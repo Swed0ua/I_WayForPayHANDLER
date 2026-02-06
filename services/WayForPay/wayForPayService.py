@@ -47,7 +47,6 @@ class WayForPayService:
             keys_order=GET_PAYMENTS_SIGNATURE_KEYS
             )
 
-        print("sign_key", sign_key)
         print("dateBegin", date_begin)
         print("dateEnd", date_end)
 

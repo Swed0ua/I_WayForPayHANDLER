@@ -26,7 +26,7 @@ def run_payments_statistics_task_for_day(days_ago: int = -1) -> None:
 
     transaction_list = result.get("transactionList", [])
     suitable_transactions = WayForPayAdapter.extract_suitable_items(transaction_list=transaction_list)
-    
+
     calculated_amount_dict = WayForPayAdapter.group_transactions_by_amount(transaction_list=suitable_transactions)
 
-    print(calculated_amount_dict)
+    print("calculated_amount_dict", calculated_amount_dict)
