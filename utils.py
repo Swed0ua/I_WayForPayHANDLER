@@ -13,3 +13,6 @@ def get_day_timestamp_range(days_ago: int = -1) -> tuple[int, int]:
     day_start = datetime.combine(target_date, datetime.min.time())
     day_end = day_start.replace(hour=23, minute=59, second=59, microsecond=999_999)
     return int(day_start.timestamp()), int(day_end.timestamp())
+
+def format_timestamp_to_date(ts: int, fmt: str = "%d.%m.%Y") -> str:
+    return datetime.fromtimestamp(ts).strftime(fmt)

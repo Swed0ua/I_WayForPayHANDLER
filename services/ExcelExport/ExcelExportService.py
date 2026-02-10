@@ -15,7 +15,7 @@ class ExcelExportService:
         """
         title = "Amount Statistics | SmartKasa"
 
-        transformed_data = [{"count": amount_element["count"], "amount_value" : amount_element["amount_value"]} for amount_key, amount_element in amount_dict.items() ]
+        transformed_data = [{"amount_value" : amount_element["amount_value"], "count": amount_element["count"]} for amount_key, amount_element in amount_dict.items() ]
 
         return ExcelExportService.write_sheet(data=transformed_data, output_path=output_path, sheet_name=title)
     
