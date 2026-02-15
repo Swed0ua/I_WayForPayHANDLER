@@ -20,28 +20,44 @@ class B24Adapter:
     @staticmethod
     def get_tariff_title(amount: str) -> dict:
         return B24Adapter.default_tariffs_data.get(amount, B24Adapter.default_tariffs_data["default"])["title"]
-
+    
     @staticmethod
-    def to_product_rows(calculated_amount_dict: dict, amount_to_product_id: dict[str, int]) -> list[dict]:
+    def to_product_rows(calculated_amount_dict: dict, amount_to_product_id: dict) -> tuple[list[dict], list[dict]]:
         product_rows = []
+        unmatched = []
         mapping = amount_to_product_id
+
         for amount_key, data in calculated_amount_dict.items():
             amount_str = str(amount_key).strip()
-            product_id = mapping.get(amount_str)
-            print("amount_str", amount_str)
-            print("product_id", product_id)
-            if product_id is None:
-                continue
+            try:
+                amount_normalized = str(int(float(amount_str)))
+            except (TypeError, ValueError):
+                amount_normalized = amount_str
+            product_id = mapping.get(amount_str) or mapping.get(amount_normalized)
+
             count = data.get("count", 0)
             if count <= 0:
                 continue
+
+            if product_id is None:
+                unmatched.append({"amount": amount_str, "count": count})
+                continue
+
             try:
                 price = float(data.get("amount_value", amount_str))
             except (TypeError, ValueError):
                 price = 0.0
+
             product_rows.append({
                 "PRODUCT_ID": product_id,
                 "QUANTITY": float(count),
                 "PRICE": price,
             })
-        return product_rows
+
+        return product_rows, unmatched
+
+    def format_unmatched_comment(unmatched: list[dict]) -> str:
+        if not unmatched:
+            return ""
+        parts = [f"({item['amount']} x {item['count']}шт.)" for item in unmatched]
+        return "Не знайдені товарні картки: " + " ".join(parts)
