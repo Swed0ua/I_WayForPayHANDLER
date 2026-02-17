@@ -26,7 +26,7 @@ class WayForPayService:
             hashlib.md5).hexdigest()
 
     def _make_req(self, endpoint: str, method: str = "POST", payload: dict = {}, **kwargs):
-        url = f"{self.base_url.rstrip("/")}/{endpoint.lstrip("/")}"
+        url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
         headers = {
             "Content-Type": "application/json",
         }
