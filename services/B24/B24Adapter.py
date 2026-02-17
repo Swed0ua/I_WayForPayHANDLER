@@ -1,3 +1,4 @@
+import os
 from services.B24.B24Config import DEFAULT_DEAL_FIELD_MAPPING, DEFAULT_TARIFFS_DATA
 
 
@@ -56,8 +57,16 @@ class B24Adapter:
 
         return product_rows, unmatched
 
+    @staticmethod
     def format_unmatched_comment(unmatched: list[dict]) -> str:
         if not unmatched:
             return ""
         parts = [f"({item['amount']} x {item['count']}шт.)" for item in unmatched]
         return "Не знайдені товарні картки: " + " ".join(parts)
+
+    @staticmethod
+    def format_default_fields() -> dict:
+        return {
+            "UF_CRM_1682949203": os.getenv("WAY_FOR_PAY_EDRPOU"),
+            "CONTACT_ID": os.getenv("WAY_FOR_PAY_CONTACT_ID"),
+        }

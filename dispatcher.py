@@ -63,6 +63,9 @@ def run_payments_statistics_task_for_day(days_ago: int = -1) -> None:
             unmatched_comment = B24Adapter.format_unmatched_comment(unmatched=unmatched)
             fields["COMMENTS"] = unmatched_comment
 
+        # DEFAULT FIELDS
+        fields.update(B24Adapter.format_default_fields())
+
         if product_rows:
             result = b24_service.create_deal_with_products(
                 fields=fields,
