@@ -67,10 +67,10 @@ Wants=network.target
 Type=simple
 User=root
 Group=root
-WorkingDirectory=/path/to/I_WEYFORPAY_HANDLER
-Environment=PATH=/path/to/I_WEYFORPAY_HANDLER/venv/bin
-Environment=PYTHONPATH=/path/to/I_WEYFORPAY_HANDLER
-ExecStart=/path/to/I_WEYFORPAY_HANDLER/venv/bin/python main.py
+WorkingDirectory=/root/I_WayForPayHANDLER
+Environment=PATH=/root/I_WayForPayHANDLER/venv/bin
+Environment=PYTHONPATH=/root/I_WayForPayHANDLER
+ExecStart=/root/I_WayForPayHANDLER/venv/bin/python main.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -80,7 +80,7 @@ SyslogIdentifier=I_WEYFORPAY_HANDLER
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/path/to/I_WEYFORPAY_HANDLER
+ReadWritePaths=/root/I_WayForPayHANDLER
 
 [Install]
 WantedBy=multi-user.target
