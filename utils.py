@@ -10,8 +10,10 @@ def get_day_timestamp_range(days_ago: int = -1) -> tuple[int, int]:
     """
     today = datetime.now().date()
     target_date = today + timedelta(days=days_ago)
+    next_date = today + timedelta(days=days_ago + 1)
     day_start = datetime.combine(target_date, datetime.min.time())
-    day_end = day_start.replace(hour=23, minute=59, second=59, microsecond=999_999)
+    next_day_start = datetime.combine(next_date, datetime.min.time())
+    day_end = next_day_start.replace(hour=0, minute=10, second=00, microsecond=999_999)
     return int(day_start.timestamp()), int(day_end.timestamp())
 
 def format_timestamp_to_date(ts: int, fmt: str = "%d.%m.%Y") -> str:

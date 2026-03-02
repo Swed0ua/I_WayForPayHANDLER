@@ -35,7 +35,18 @@ def run_payments_statistics_task_for_day(days_ago: int = -1) -> None:
 
         transaction_list = result.get("transactionList", [])
         suitable_transactions = WayForPayAdapter.extract_suitable_items(transaction_list=transaction_list)
+        print('[WayForPay] Suitable Transactions count', len(suitable_transactions))
+        # print("[WayForPay] suitable_transactions", suitable_transactions)
 
+        # for transaction_idx in range(len(suitable_transactions)):
+            # print("------------------------------0-")
+            # print("[WayForPay] transaction id", suitable_transactions[transaction_idx].get("transactionStatus"))
+            # print("[WayForPay] transaction amount", suitable_transactions[transaction_idx].get("amount"))
+            # print("------------------------------1-")
+            # if suitable_transactions[transaction_idx].get("amount") == "440.00":
+            #     print("[WayForPay] transaction", suitable_transactions[transaction_idx])
+            #     print("------------------------------1.5-")
+      
         calculated_amount_dict = WayForPayAdapter.group_transactions_by_amount(transaction_list=suitable_transactions)
 
         excel_export_path = ExcelExportService.write_amount_statistics(amount_dict=calculated_amount_dict)
@@ -46,11 +57,14 @@ def run_payments_statistics_task_for_day(days_ago: int = -1) -> None:
         products = b24_service.get_products(catalog_id=CATALOG_PRODUCT_ID)
         amount_to_product_id = b24_service.build_amount_to_product_id(products=products)
         product_rows, unmatched = B24Adapter.to_product_rows(calculated_amount_dict=calculated_amount_dict, amount_to_product_id=amount_to_product_id)
-
+        print("-- [B24] product_rows", product_rows)
+        print("-- [B24] unmatched", unmatched)
+        
         total_amount = sum(
             float(data.get("amount_value", 0) or 0) * data.get("count", 0)
             for data in calculated_amount_dict.values()
         )
+        print("[B24] total_amount", total_amount)
 
         fields = B24Adapter.to_deal_fields(data={
             "title": f"{chosen_date} | Статистика платежів | Точна Сума {total_amount}",
