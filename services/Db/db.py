@@ -93,3 +93,24 @@ def upsert_transactions(transaction_list: list[dict], db_path: Optional[str] = N
         conn.commit()
     finally:
         conn.close()
+
+
+def get_transactions_by_settlement_date(
+    start_ts: int, end_ts: int, db_path: Optional[str] = None
+) -> list[dict]:
+    """Повертає транзакції з БД, у яких settlementDate в діапазоні [start_ts, end_ts]. Формат як у API."""
+    conn = _get_connection(db_path)
+    try:
+        cur = conn.execute(
+            """SELECT orderReference, transactionType, createdDate, amount, currency,
+                      transactionStatus, processingDate, reasonCode, reason, email, phone,
+                      paymentSystem, cardPan, cardType, issuerBankCountry, issuerBankName,
+                      fee, settlementDate FROM transactions
+               WHERE CAST(settlementDate AS INTEGER) >= ? AND CAST(settlementDate AS INTEGER) <= ?""",
+            (start_ts, end_ts),
+        )
+        rows = cur.fetchall()
+        keys = [c[0] for c in cur.description]
+        return [dict(zip(keys, row)) for row in rows]
+    finally:
+        conn.close()

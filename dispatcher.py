@@ -4,7 +4,7 @@ from config import BITRIX24_DEAL_AMMOUNT_STATISTICS_COLUMN_ID, BITRIX24_DEAL_CAT
 from services.B24.B24Adapter import B24Adapter
 from services.B24.B24Config import CATALOG_PRODUCT_ID
 from services.B24.B24Servece import B24Service
-from services.Db.db import upsert_transactions
+from services.Db.db import get_transactions_by_settlement_date, upsert_transactions
 from services.ExcelExport.ExcelExportService import ExcelExportService
 from services.WayForPay.wayForPayAdapter import WayForPayAdapter
 from services.WayForPay.wayForPayService import WayForPayService
@@ -34,48 +34,37 @@ def run_daily_task(days_ago: int = 0) -> None:
         print("ERROR run_daily_task:", e)
 
 
-def run_payments_statistics_task_for_day(days_ago: int = -1) -> None: 
-    try: 
+def run_payments_statistics_task_for_day(days_ago: int = -1, isLocalData: bool = True) -> None:
+    try:
         start_ts, end_ts = get_day_timestamp_range(days_ago=days_ago)
         chosen_date = format_timestamp_to_date(ts=start_ts)
 
-        merchant_account = os.getenv("WAYFORPAY_MERCHANT_ACCOUNT")
-        merchant_secret = os.getenv("WAYFORPAY_MERCHANT_SECRET_KEY")
+        if isLocalData:
+            transaction_list = get_transactions_by_settlement_date(start_ts, end_ts)
+        else:
+            merchant_account = os.getenv("WAYFORPAY_MERCHANT_ACCOUNT")
+            merchant_secret = os.getenv("WAYFORPAY_MERCHANT_SECRET_KEY")
+            if not merchant_account or not merchant_secret:
+                raise ValueError("WAYFORPAY_MERCHANT_ACCOUNT and WAYFORPAY_MERCHANT_SECRET_KEY must be set")
+            service = WayForPayService(merchant_account=merchant_account, merchant_secret_key=merchant_secret)
+            result = service.get_payments(
+                date_begin=str(start_ts),
+                date_end=str(end_ts),
+                merchant_account=merchant_account,
+            )
+            transaction_list = result.get("transactionList", [])
+
+        suitable_transactions = WayForPayAdapter.extract_suitable_items(transaction_list=transaction_list)
+        print("[WayForPay] Suitable transactions:", len(suitable_transactions))
 
         b24_webhook_url = os.getenv("BITRIX24_WEBHOOK_URL")
+        b24_service = B24Service(webhook_url=b24_webhook_url)
 
-        if not merchant_account or not merchant_secret:
-            raise ValueError("WAYFORPAY_MERCHANT_ACCOUNT and WAYFORPAY_MERCHANT_SECRET_KEY must be set")
-
-        service = WayForPayService(merchant_account=merchant_account, merchant_secret_key=merchant_secret)
-
-        result = service.get_payments(
-            date_begin=str(start_ts),
-            date_end=str(end_ts),
-            merchant_account=merchant_account,
-        )
-
-        transaction_list = result.get("transactionList", [])
-        suitable_transactions = WayForPayAdapter.extract_suitable_items(transaction_list=transaction_list)
-        print('[WayForPay] Suitable Transactions count', len(suitable_transactions))
-        # print("[WayForPay] suitable_transactions", suitable_transactions)
-
-        # for transaction_idx in range(len(suitable_transactions)):
-            # print("------------------------------0-")
-            # print("[WayForPay] transaction id", suitable_transactions[transaction_idx].get("transactionStatus"))
-            # print("[WayForPay] transaction amount", suitable_transactions[transaction_idx].get("amount"))
-            # print("------------------------------1-")
-            # if suitable_transactions[transaction_idx].get("amount") == "440.00":
-            #     print("[WayForPay] transaction", suitable_transactions[transaction_idx])
-            #     print("------------------------------1.5-")
-      
         calculated_amount_dict = WayForPayAdapter.group_transactions_by_amount(transaction_list=suitable_transactions)
 
         excel_export_path = ExcelExportService.write_amount_statistics(amount_dict=calculated_amount_dict)
         print("excel_export_path", excel_export_path)
 
-        b24_service = B24Service(webhook_url=b24_webhook_url)
-        
         products = b24_service.get_products(catalog_id=CATALOG_PRODUCT_ID)
         amount_to_product_id = b24_service.build_amount_to_product_id(products=products)
         product_rows, unmatched = B24Adapter.to_product_rows(calculated_amount_dict=calculated_amount_dict, amount_to_product_id=amount_to_product_id)
