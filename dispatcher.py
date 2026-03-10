@@ -4,12 +4,34 @@ from config import BITRIX24_DEAL_AMMOUNT_STATISTICS_COLUMN_ID, BITRIX24_DEAL_CAT
 from services.B24.B24Adapter import B24Adapter
 from services.B24.B24Config import CATALOG_PRODUCT_ID
 from services.B24.B24Servece import B24Service
+from services.Db.db import upsert_transactions
 from services.ExcelExport.ExcelExportService import ExcelExportService
 from services.WayForPay.wayForPayAdapter import WayForPayAdapter
 from services.WayForPay.wayForPayService import WayForPayService
 from utils import format_timestamp_to_date, get_day_timestamp_range
 
 load_dotenv()
+
+
+def run_daily_task(days_ago: int = 0) -> None:
+    """О 23:59: дістає транзакції WayForPay за день і записує/оновлює в БД (по orderReference)."""
+    try:
+        start_ts, end_ts = get_day_timestamp_range(days_ago=days_ago)
+        merchant_account = os.getenv("WAYFORPAY_MERCHANT_ACCOUNT")
+        merchant_secret = os.getenv("WAYFORPAY_MERCHANT_SECRET_KEY")
+        if not merchant_account or not merchant_secret:
+            raise ValueError("WAYFORPAY_MERCHANT_ACCOUNT and WAYFORPAY_MERCHANT_SECRET_KEY must be set")
+        service = WayForPayService(merchant_account=merchant_account, merchant_secret_key=merchant_secret)
+        result = service.get_payments(
+            date_begin=str(start_ts),
+            date_end=str(end_ts),
+            merchant_account=merchant_account,
+        )
+        transaction_list = result.get("transactionList", [])
+        upsert_transactions(transaction_list)
+        print(f"[WayForPay] Synced {len(transaction_list)} transactions to DB.")
+    except Exception as e:
+        print("ERROR run_daily_task:", e)
 
 
 def run_payments_statistics_task_for_day(days_ago: int = -1) -> None: 
