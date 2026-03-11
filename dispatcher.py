@@ -13,7 +13,7 @@ from utils import format_timestamp_to_date, get_day_timestamp_range
 load_dotenv()
 
 
-def run_daily_task(days_ago: int = 0) -> None:
+def run_daily_task(days_ago: int = -1) -> None:
     """О 23:59: дістає транзакції WayForPay за день і записує/оновлює в БД (по orderReference)."""
     try:
         start_ts, end_ts = get_day_timestamp_range(days_ago=days_ago)
