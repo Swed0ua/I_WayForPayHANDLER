@@ -1,4 +1,5 @@
-from dispatcher import run_payments_statistics_task_for_day
+from dispatcher import run_daily_task, run_payments_statistics_task_for_day
 
 
-run_payments_statistics_task_for_day(-1)
+run_payments_statistics_task_for_day(-2)
+# run_daily_task(-2)
