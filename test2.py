@@ -1,0 +1,5 @@
+from dispatcher import print_wayforpay_email_bodies_today, run_payments_statistics_task_from_gmail_csv
+
+
+# print_wayforpay_email_bodies_today()
+run_payments_statistics_task_from_gmail_csv(-2)
