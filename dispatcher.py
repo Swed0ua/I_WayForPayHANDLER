@@ -189,10 +189,15 @@ def run_payments_statistics_task_from_gmail_csv(days_ago: int = 0) -> None:
             calculated_amount_dict = WayForPayAdapter.group_transactions_by_amount(transaction_list=transaction_list)
             print(f"[WayForPay/Gmail] {chosen_date} transactions:", len(transaction_list))
 
-            product_rows, unmatched = B24Adapter.to_product_rows(
+            base_product_rows, remaining_calculated_amount_dict = B24Adapter.to_base_tariff_rows(
                 calculated_amount_dict=calculated_amount_dict,
+                products=products,
+            )
+            product_rows, unmatched = B24Adapter.to_product_rows(
+                calculated_amount_dict=remaining_calculated_amount_dict,
                 amount_to_product_id=amount_to_product_id,
             )
+            product_rows = base_product_rows + product_rows
 
             total_amount = sum(
                 float(data.get("amount_value", 0) or 0) * data.get("count", 0)
@@ -305,7 +310,15 @@ def run_payments_statistics_task_for_day(days_ago: int = -1, isLocalData: bool =
 
         products = b24_service.get_products(catalog_id=CATALOG_PRODUCT_ID)
         amount_to_product_id = b24_service.build_amount_to_product_id(products=products)
-        product_rows, unmatched = B24Adapter.to_product_rows(calculated_amount_dict=calculated_amount_dict, amount_to_product_id=amount_to_product_id)
+        base_product_rows, remaining_calculated_amount_dict = B24Adapter.to_base_tariff_rows(
+            calculated_amount_dict=calculated_amount_dict,
+            products=products,
+        )
+        product_rows, unmatched = B24Adapter.to_product_rows(
+            calculated_amount_dict=remaining_calculated_amount_dict,
+            amount_to_product_id=amount_to_product_id,
+        )
+        product_rows = base_product_rows + product_rows
         print("-- [B24] product_rows", product_rows)
         print("-- [B24] unmatched", unmatched)
         
