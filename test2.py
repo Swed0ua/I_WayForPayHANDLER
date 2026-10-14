@@ -1,5 +1,7 @@
+from logging_setup import setup_logging
 from dispatcher import print_wayforpay_email_bodies_today, run_payments_statistics_task_from_gmail_csv
 
+setup_logging()
 
 # print_wayforpay_email_bodies_today()
 run_payments_statistics_task_from_gmail_csv(0)

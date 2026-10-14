@@ -1,5 +1,9 @@
 import requests
 
+from logging_setup import get_logger
+
+logger = get_logger(__name__)
+
 
 class B24Service:
     """
@@ -23,7 +27,9 @@ class B24Service:
             "filter": {"CATALOG_ID": catalog_id},
             "select": ["ID", "NAME", "PRICE", "CURRENCY_ID"]
         })
-        return resp.get("result", [])
+        products = resp.get("result", [])
+        logger.info("B24 products loaded: catalog_id=%s count=%s", catalog_id, len(products))
+        return products
 
     def build_amount_to_product_id(self, products: list[dict]) -> dict[str, int]:
         mapping = {}
@@ -31,35 +37,31 @@ class B24Service:
             price = p.get("PRICE")
             if price is None:
                 continue
-            
+
             key = str(int(float(str(price))))
             mapping[key] = int(p["ID"])
-            mapping[f"{key}.00"] = int(p["ID"])  
+            mapping[f"{key}.00"] = int(p["ID"])
         return mapping
-    
+
     def create_deal(self, fields: dict) -> dict:
-        return self._call("crm.deal.add", {"fields": fields})
+        result = self._call("crm.deal.add", {"fields": fields})
+        logger.info("B24 deal created: id=%s", result.get("result"))
+        return result
 
     def create_deal_with_products(self, fields, product_rows, currency_id="EUR"):
         if not product_rows:
             return self.create_deal(fields)
-        
-        # 1. Створити угоду
+
         deal_result = self._call("crm.deal.add", {"fields": fields})
         deal_id = deal_result.get("result")
+        logger.info("B24 deal created: id=%s", deal_id)
 
-        print("deal_result", deal_id)
-        print("deal_result", deal_result)
-        
-        # 2. Додати товари до угоди
         product_rows_result = self._call("crm.deal.productrows.set", {
             "id": deal_id,
             "rows": product_rows,
             "currencyId": currency_id,
         })
+        logger.info("B24 product rows set: deal_id=%s ok=%s rows=%s",
+                    deal_id, product_rows_result.get("result"), len(product_rows))
 
-        print("--------------------------------")
-        print("product_rows_result", product_rows_result)
-        print("--------------------------------")
-        
         return deal_result

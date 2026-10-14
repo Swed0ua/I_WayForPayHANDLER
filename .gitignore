@@ -2,6 +2,7 @@ venv/
 __pycache__/
 .env
 data/
+logs/
 report.xlsx
 token.json
 client_secret*.json

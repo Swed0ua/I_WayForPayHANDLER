@@ -12,6 +12,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from config import BITRIX24_DEAL_AMMOUNT_STATISTICS_COLUMN_ID, BITRIX24_DEAL_CATEGORY_ID
+from logging_setup import get_logger
 from services.B24.B24Adapter import B24Adapter
 from services.B24.B24Config import CATALOG_PRODUCT_ID
 from services.B24.B24Servece import B24Service
@@ -22,6 +23,8 @@ from services.WayForPay.wayForPayService import WayForPayService
 from utils import format_timestamp_to_date, get_day_timestamp_range
 
 load_dotenv()
+
+logger = get_logger(__name__)
 
 _GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 _PROJECT_ROOT = Path(__file__).resolve().parent
@@ -100,13 +103,14 @@ def _print_first_csv_from_zip(zip_bytes: bytes) -> None:
         if not csv_names:
             return
         with zf.open(csv_names[0]) as f:
-            print(f.read().decode("utf-8-sig", errors="replace"))
+            logger.debug("CSV preview (%s):\n%s", csv_names[0], f.read().decode("utf-8-sig", errors="replace"))
 
 
 def _first_csv_from_zip(zip_bytes: bytes) -> bytes | None:
     with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
         csv_names = [n for n in zf.namelist() if n.lower().endswith(".csv")]
         if not csv_names:
+            logger.debug("ZIP has no .csv entries: %s", zf.namelist())
             return None
         with zf.open(csv_names[0]) as f:
             return f.read()
@@ -116,23 +120,32 @@ def _first_zip_csv_bytes_for_day(days_ago: int = 0) -> bytes | None:
     day = date.today() + timedelta(days=days_ago)
     nxt = day + timedelta(days=1)
     q = f"from:{_WAYFORPAY_FROM} after:{day:%Y/%m/%d} before:{nxt:%Y/%m/%d}"
+    logger.info("Gmail search: days_ago=%s day=%s query=%s", days_ago, day.isoformat(), q)
     svc = _gmail_service()
     listed = svc.users().messages().list(userId="me", q=q).execute()
-    for item in listed.get("messages", []):
+    messages = listed.get("messages", [])
+    logger.info("Gmail messages found: %s", len(messages))
+    for item in messages:
         msg = svc.users().messages().get(userId="me", id=item["id"], format="full").execute()
         payload = msg.get("payload") or {}
+        filenames = _attachment_filenames(payload)
+        logger.info("Message id=%s attachments=%s", item["id"], filenames or "(none)")
         for part in _iter_parts(payload):
             fn = (part.get("filename") or "").lower()
             if not fn.endswith(".zip"):
                 continue
             raw = _part_raw_bytes(svc, item["id"], part)
             if not raw:
+                logger.warning("Empty ZIP attachment: %s", fn)
                 continue
             try:
                 csv_bytes = _first_csv_from_zip(raw)
                 if csv_bytes:
+                    logger.info("CSV extracted from ZIP %s (%s bytes)", fn, len(csv_bytes))
                     return csv_bytes
+                logger.warning("ZIP %s has no CSV inside", fn)
             except zipfile.BadZipFile:
+                logger.warning("Bad ZIP file: %s", fn)
                 continue
     return None
 
@@ -169,16 +182,19 @@ def _csv_rows_grouped_by_day(csv_bytes: bytes) -> dict[str, list[dict]]:
 
 
 def run_payments_statistics_task_from_gmail_csv(days_ago: int = 0) -> None:
+    logger.info("=== run_payments_statistics_task_from_gmail_csv start days_ago=%s ===", days_ago)
     try:
         csv_bytes = _first_zip_csv_bytes_for_day(days_ago=days_ago)
         if not csv_bytes:
-            print("[WayForPay/Gmail] CSV not found in ZIP attachments.")
+            logger.warning("CSV not found in ZIP attachments (days_ago=%s)", days_ago)
             return
 
         grouped_by_day = _csv_rows_grouped_by_day(csv_bytes=csv_bytes)
         if not grouped_by_day:
-            print("[WayForPay/Gmail] No suitable Approved rows in CSV.")
+            logger.warning("No suitable Approved rows in CSV")
             return
+
+        logger.info("CSV days with Approved rows: %s", list(grouped_by_day.keys()))
 
         b24_webhook_url = os.getenv("BITRIX24_WEBHOOK_URL")
         b24_service = B24Service(webhook_url=b24_webhook_url)
@@ -187,7 +203,7 @@ def run_payments_statistics_task_from_gmail_csv(days_ago: int = 0) -> None:
 
         for chosen_date, transaction_list in sorted(grouped_by_day.items()):
             calculated_amount_dict = WayForPayAdapter.group_transactions_by_amount(transaction_list=transaction_list)
-            print(f"[WayForPay/Gmail] {chosen_date} transactions:", len(transaction_list))
+            logger.info("%s transactions: %s", chosen_date, len(transaction_list))
 
             base_product_rows, remaining_calculated_amount_dict = B24Adapter.to_base_tariff_rows(
                 calculated_amount_dict=calculated_amount_dict,
@@ -203,6 +219,8 @@ def run_payments_statistics_task_from_gmail_csv(days_ago: int = 0) -> None:
                 float(data.get("amount_value", 0) or 0) * data.get("count", 0)
                 for data in calculated_amount_dict.values()
             )
+            logger.info("%s total_amount=%s product_rows=%s unmatched=%s",
+                        chosen_date, total_amount, len(product_rows), unmatched)
 
             fields = B24Adapter.to_deal_fields(data={
                 "title": f"{chosen_date} | Статистика платежів | Точна Сума {total_amount}",
@@ -225,27 +243,27 @@ def run_payments_statistics_task_from_gmail_csv(days_ago: int = 0) -> None:
             else:
                 result = b24_service.create_deal(fields=fields)
 
-            print(f"[B24/Gmail] {chosen_date} result:", result)
-    except Exception as e:
-        print("ERROR run_payments_statistics_task_from_gmail_csv:", e)
+            logger.info("%s B24 deal result: %s", chosen_date, result)
+        logger.info("=== run_payments_statistics_task_from_gmail_csv done ===")
+    except Exception:
+        logger.exception("run_payments_statistics_task_from_gmail_csv failed")
 
 
 def print_wayforpay_email_bodies_today() -> None:
     today = date.today() - timedelta(days=1)
     nxt = today + timedelta(days=1)
     q = f"from:{_WAYFORPAY_FROM} after:{today:%Y/%m/%d} before:{nxt:%Y/%m/%d}"
+    logger.info("Debug Gmail listing (yesterday): %s", q)
     svc = _gmail_service()
     listed = svc.users().messages().list(userId="me", q=q).execute()
     msgs = listed.get("messages", [])
     if not msgs:
-        print(0)
+        logger.info("No messages found")
         return
     for item in msgs:
         msg = svc.users().messages().get(userId="me", id=item["id"], format="full").execute()
         pl = msg.get("payload") or {}
-        print(_attachment_count(pl))
-        for name in _attachment_filenames(pl):
-            print(name)
+        logger.info("attachments_count=%s filenames=%s", _attachment_count(pl), _attachment_filenames(pl))
         for part in _iter_parts(pl):
             fn = (part.get("filename") or "").lower()
             if not fn.endswith(".zip"):
@@ -258,6 +276,7 @@ def print_wayforpay_email_bodies_today() -> None:
 
 def run_daily_task(days_ago: int = -1) -> None:
     """О 23:59: дістає транзакції WayForPay за день і записує/оновлює в БД (по orderReference)."""
+    logger.info("=== run_daily_task start days_ago=%s ===", days_ago)
     try:
         start_ts, end_ts = get_day_timestamp_range(days_ago=days_ago)
         merchant_account = os.getenv("WAYFORPAY_MERCHANT_ACCOUNT")
@@ -272,18 +291,21 @@ def run_daily_task(days_ago: int = -1) -> None:
         )
         transaction_list = result.get("transactionList", [])
         upsert_transactions(transaction_list)
-        print(f"[WayForPay] Synced {len(transaction_list)} transactions to DB.")
-    except Exception as e:
-        print("ERROR run_daily_task:", e)
+        logger.info("Synced %s transactions to DB", len(transaction_list))
+    except Exception:
+        logger.exception("run_daily_task failed")
 
 
 def run_payments_statistics_task_for_day(days_ago: int = -1, isLocalData: bool = True) -> None:
+    logger.info("=== run_payments_statistics_task_for_day start days_ago=%s isLocalData=%s ===",
+                days_ago, isLocalData)
     try:
         start_ts, end_ts = get_day_timestamp_range(days_ago=days_ago)
         chosen_date = format_timestamp_to_date(ts=start_ts)
 
         if isLocalData:
             transaction_list = get_transactions_by_settlement_date(start_ts, end_ts)
+            logger.info("Loaded %s transactions from DB", len(transaction_list))
         else:
             merchant_account = os.getenv("WAYFORPAY_MERCHANT_ACCOUNT")
             merchant_secret = os.getenv("WAYFORPAY_MERCHANT_SECRET_KEY")
@@ -296,9 +318,10 @@ def run_payments_statistics_task_for_day(days_ago: int = -1, isLocalData: bool =
                 merchant_account=merchant_account,
             )
             transaction_list = result.get("transactionList", [])
+            logger.info("Loaded %s transactions from WayForPay API", len(transaction_list))
 
         suitable_transactions = WayForPayAdapter.extract_suitable_items(transaction_list=transaction_list)
-        print("[WayForPay] Suitable transactions:", len(suitable_transactions))
+        logger.info("Suitable (Approved) transactions: %s", len(suitable_transactions))
 
         b24_webhook_url = os.getenv("BITRIX24_WEBHOOK_URL")
         b24_service = B24Service(webhook_url=b24_webhook_url)
@@ -306,7 +329,7 @@ def run_payments_statistics_task_for_day(days_ago: int = -1, isLocalData: bool =
         calculated_amount_dict = WayForPayAdapter.group_transactions_by_amount(transaction_list=suitable_transactions)
 
         excel_export_path = ExcelExportService.write_amount_statistics(amount_dict=calculated_amount_dict)
-        print("excel_export_path", excel_export_path)
+        logger.info("Excel export: %s", excel_export_path)
 
         products = b24_service.get_products(catalog_id=CATALOG_PRODUCT_ID)
         amount_to_product_id = b24_service.build_amount_to_product_id(products=products)
@@ -319,14 +342,13 @@ def run_payments_statistics_task_for_day(days_ago: int = -1, isLocalData: bool =
             amount_to_product_id=amount_to_product_id,
         )
         product_rows = base_product_rows + product_rows
-        print("-- [B24] product_rows", product_rows)
-        print("-- [B24] unmatched", unmatched)
-        
+        logger.info("product_rows=%s unmatched=%s", product_rows, unmatched)
+
         total_amount = sum(
             float(data.get("amount_value", 0) or 0) * data.get("count", 0)
             for data in calculated_amount_dict.values()
         )
-        print("[B24] total_amount", total_amount)
+        logger.info("total_amount=%s date=%s", total_amount, chosen_date)
 
         fields = B24Adapter.to_deal_fields(data={
             "title": f"{chosen_date} | Статистика платежів | Точна Сума {total_amount}",
@@ -351,6 +373,6 @@ def run_payments_statistics_task_for_day(days_ago: int = -1, isLocalData: bool =
         else:
             result = b24_service.create_deal(fields=fields)
 
-        print("b24_service result", result)
-    except Exception as e:
-        print("ERROR:", e)
+        logger.info("B24 deal result: %s", result)
+    except Exception:
+        logger.exception("run_payments_statistics_task_for_day failed")

@@ -1,9 +1,12 @@
 import hmac
 import hashlib
 import requests
-import json
 
+from logging_setup import get_logger
 from services.WayForPay.wayForPayConfig import GET_PAYMENTS_SIGNATURE_KEYS
+
+logger = get_logger(__name__)
+
 
 class WayForPayService:
     def __init__(self, merchant_account:str, merchant_secret_key:str, base_url:str = "https://api.wayforpay.com/api"):
@@ -47,8 +50,7 @@ class WayForPayService:
             keys_order=GET_PAYMENTS_SIGNATURE_KEYS
             )
 
-        print("dateBegin", date_begin)
-        print("dateEnd", date_end)
+        logger.info("WayForPay get_payments dateBegin=%s dateEnd=%s", date_begin, date_end)
 
         payload = {
                 "apiVersion": 1,
